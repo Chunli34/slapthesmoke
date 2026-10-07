@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="zh-CN"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>今天也有人在抽烟</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@500;900&display=swap" rel="stylesheet">
+<style>
+:root{--paper:#f3ecd8;--ink:#1a1614;--red:#d6282b;--smoke:#9a948a;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html,body{height:100%;margin:0;background:var(--paper);overflow:hidden;font-family:"Noto Sans SC",system-ui,sans-serif;color:var(--ink)}
+canvas{display:block;width:100%;height:100%;touch-action:none;cursor:none}
+#ui{position:absolute;inset:0;pointer-events:none}
+.bar{position:absolute;left:14px;right:14px;top:calc(env(safe-area-inset-top,0px) + 10px);display:grid;grid-template-columns:1fr 1fr;gap:10px;font-weight:900;font-size:13px}
+.m{border:3px solid var(--ink);height:16px;background:#fff;position:relative;margin-top:3px}
+.m i{position:absolute;inset:0 auto 0 0;width:0;background:var(--ink)}
+#air i{background:var(--smoke)}#addict i{background:var(--red)}
+#time{position:absolute;right:14px;top:calc(env(safe-area-inset-top,0px) + 62px);font-weight:900;font-size:28px}
+#combo{position:absolute;left:14px;top:calc(env(safe-area-inset-top,0px) + 62px);font-weight:900;font-size:28px;color:var(--red)}
+#panel{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;background:rgba(243,236,216,.94);text-align:center;padding:24px;pointer-events:auto}
+#panel h1{font-size:clamp(30px,8vw,56px);margin:0;font-weight:900;line-height:1.1}
+#panel p{margin:0;max-width:440px;line-height:1.6;font-weight:500}
+#panel button{font:900 24px "Noto Sans SC",sans-serif;background:var(--red);color:#fff;border:4px solid var(--ink);padding:10px 34px;box-shadow:5px 5px 0 var(--ink);cursor:pointer}
+#panel button:active{transform:translate(3px,3px);box-shadow:2px 2px 0 var(--ink)}
+#strip{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;max-width:420px;width:100%}
+#strip div{border:3px solid var(--ink);background:#fff;padding:8px 6px;font-size:13px;line-height:1.5;font-weight:500;min-height:84px;display:flex;align-items:center;justify-content:center}
+#panel .sub{font-weight:900;color:var(--red)}
+#dlg{position:absolute;left:12px;right:12px;top:68%;display:none;background:#fff;border:4px solid var(--ink);box-shadow:5px 5px 0 var(--ink);padding:10px 14px 12px;cursor:pointer;max-width:560px;margin:0 auto}
+#dlg b{display:inline-block;background:var(--ink);color:var(--paper);padding:1px 10px;font-size:13px;margin-bottom:6px}
+#dlg b.me{background:var(--red)}
+#dlg p{margin:0;font-weight:900;font-size:17px;line-height:1.55}
+#dlg small{display:block;text-align:right;font-size:11px;color:#777;margin-top:2px}
+#mus{position:absolute;right:14px;top:calc(env(safe-area-inset-top,0px) + 100px);width:38px;height:38px;border:3px solid var(--ink);background:#fff;font-size:17px;padding:0;pointer-events:auto;cursor:pointer}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style></head><body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <div class="bar"><div>二手烟<div class="m" id="air"><i></i></div></div><div>他的烟瘾<div class="m" id="addict"><i></i></div></div></div>
+  <button id="mus" aria-label="音乐开关">🎵</button><div id="combo"></div><div id="time"></div>
+</div>
+<div id="panel"><h1>今天也有人<br>在抽烟</h1>
+<p id="msg">第一关：公交站<br>女儿有哮喘，你牵着她等公交。<br>旁边的大叔点了一支烟：“就这一根。”<br><span class="sub">按住鼠标（或手指）快速左右甩动，扇他的脸，也扇散烟雾。</span></p>
+<button id="go">忍无可忍</button></div>
+<div id="dlg"><b id="dwho"></b><p id="dtxt"></p><small>点击继续</small></div>
+<script>
+const cv=document.getElementById('c'),ctx=cv.getContext('2d');
+const $=id=>document.getElementById(id);
+let W,H,S,dpr;
+function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;cv.width=W*dpr;cv.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0);S=Math.min(W/420,H/640)}
+addEventListener('resize',resize);resize();
+const INK='#1a1614',PAPER='#f3ecd8',RED='#d6282b';
+let mode='intro',lvl=0,di=0;
+const HINT='按住鼠标（或手指）快速左右甩动，扇他的脸，也扇散烟雾。';
+const LV=[
+{name:'第一关：高铁站',title:'今天也有人<br>在抽烟',intro:'刚下高铁，你拖着行李走出站台。<br>突然闻到一股浓烈的烟味。<br><span class="sub">又有人在抽烟。</span>',btn:'上前制止',jk:'#a8a48f',fin:'扇他！',
+ talk:[['旁白','你走上前：“先生，这里不能抽烟。”'],['大叔','我就要抽，你管得着吗？'],['我','这是公共场合不能吸烟！二手烟已经影响到我了！你怎么这么没素质！'],['大叔','去他妈的，我就要抽，你能把我怎么着？'],['旁白','你深吸一口气——']],
+ win:['他把烟掐了。','地上的烟头，他一个个捡了起来。','你拖着行李走出了站。'],lose:['你被熏得退了一步，咳了起来。','他又点了一根：“就这一根。”','你拖着行李走远，心里默默记下：下一次。']},
+{name:'第二关：国庆饭店',title:'国庆假期<br>饭店风波',intro:'国庆假期，你带着家人来饭店吃饭。<br>刚一落座，就闻到邻桌飘来的烟味。<br><span class="sub">一桌人都皱起了眉。</span>',btn:'走过去',jk:'#8a5a46',fin:'反制！',
+ talk:[['我','拜托把烟灭了，这是在饭店，没人想吸你的二手烟。'],['大叔','你不抽我不抽，航空母舰谁来修？你戒烟我戒烟，火箭怎么飞上天？'],['我','你一根，我一根，从此以后没得生。你不戒，我不戒，住院一夜又一夜。你一口，我一口，疾病缠身不放手。你一包，我一包，国库医保随便耗。'],['大叔','去你妈的！'],['旁白','他腾地站起来，抡起手臂作势要打你——你抢先一步反制！']],
+ win:['他把烟掐了，邻桌安静了。','服务员过来，默默撤走了烟灰缸。','你坐回家人身边：“菜都凉了，快吃。”'],lose:['烟雾飘了过来，一桌菜都没了胃口。','他又点了一根，得意地看着你。','你们一家换了张桌子。']}
+];
+let st,down=false,trail=[],ptr={x:-99,y:-99},audio;
+function reset(){st={talk:false,say:null,run:true,t:40,air:0,addict:100,combo:0,lit:true,relight:0,puff:0,smoke:[],pop:[],lines:0,shake:0,tilt:0,tiltV:0,face:0,cool:0,hits:0,last:performance.now(),over:false}}
+reset();st.run=false;
+let unl=false;
+function unlock(){if(unl)return;unl=true;try{navigator.audioSession&&(navigator.audioSession.type='playback')}catch(e){}
+  try{const el=new Audio('data:audio/wav;base64,UklGRqQMAABXQVZFZm10IBAAAAABAAEAQB8AAIA+AAACABAAZGF0YYAMAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA==');el.loop=true;el.volume=.01;el.play().catch(()=>{})}catch(e){}}
+function AC(){if(!audio){audio=new (window.AudioContext||window.webkitAudioContext)();unlock()}if(audio.state!=='running')audio.resume();return audio}
+function noise(a,dur,pow){const n=Math.floor(a.sampleRate*dur),b=a.createBuffer(1,n,a.sampleRate),d=b.getChannelData(0);for(let i=0;i<n;i++)d[i]=(Math.random()*2-1)*Math.pow(1-i/n,pow);const s=a.createBufferSource();s.buffer=b;return s}
+// 巴掌声：高频脆响 + 低频闷响 + 一点余韵，力度越大越响越低沉
+function beep(p){try{const a=AC(),t=a.currentTime,m=a.destination;
+  const c=noise(a,.1,2.5),hp=a.createBiquadFilter(),g=a.createGain();hp.type='highpass';hp.frequency.value=1400+p*600;g.gain.value=.55+.25*p;c.connect(hp).connect(g).connect(m);c.start(t);
+  const o=a.createOscillator(),og=a.createGain();o.type='sine';o.frequency.setValueAtTime(220-p*40,t);o.frequency.exponentialRampToValueAtTime(45,t+.16);og.gain.setValueAtTime(.7+.2*p,t);og.gain.exponentialRampToValueAtTime(.001,t+.18);o.connect(og).connect(m);o.start(t);o.stop(t+.2);
+  const r=noise(a,.25,3),bp=a.createBiquadFilter(),rg=a.createGain();bp.type='bandpass';bp.frequency.value=900;bp.Q.value=.8;rg.gain.value=.18;r.connect(bp).connect(rg).connect(m);r.start(t+.02)}catch(e){}}
+// 挥空：呼的一声
+function whoosh(v){try{const a=AC(),t=a.currentTime,w=noise(a,.22,1.2),bp=a.createBiquadFilter(),g=a.createGain();bp.type='bandpass';bp.Q.value=1.2;bp.frequency.setValueAtTime(500,t);bp.frequency.exponentialRampToValueAtTime(2200,t+.2);g.gain.value=Math.min(.35,v/6000);w.connect(bp).connect(g).connect(a.destination);w.start(t)}catch(e){}}
+const MV=.2;let mGain=null,bBus=null,sBus=null,mTimer=null,mStep=0,mNext=0,musicOn=true;
+const mf=m=>440*Math.pow(2,(m-69)/12);
+// 激昂 BGM：150BPM，A 小调 Am - F - C - G 循环；脉冲贝斯 + 强力和弦 + 方波主旋律 + 鼓组（原创合成，无外部文件）
+const ST=.2,BR=[33,29,36,31];
+const MEL=[[81,0,0,79,76,0,79,0],[77,0,0,81,79,0,77,0],[84,0,0,79,76,0,79,0],[79,0,0,83,81,0,79,83]];
+function tone(m,t,d,type,v,dest){const a=audio,o=a.createOscillator(),g=a.createGain();o.type=type;o.frequency.value=mf(m);g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(v,t+.006);g.gain.exponentialRampToValueAtTime(.0001,t+d);o.connect(g).connect(dest);o.start(t);o.stop(t+d+.05)}
+function drum(k,t){const a=audio;
+  if(k==='k'){const o=a.createOscillator(),g=a.createGain();o.frequency.setValueAtTime(150,t);o.frequency.exponentialRampToValueAtTime(42,t+.14);g.gain.setValueAtTime(.95,t);g.gain.exponentialRampToValueAtTime(.001,t+.2);o.connect(g).connect(mGain);o.start(t);o.stop(t+.22)}
+  else if(k==='s'){const n=noise(a,.16,2),f=a.createBiquadFilter(),g=a.createGain();f.type='highpass';f.frequency.value=1800;g.gain.value=.5;n.connect(f).connect(g).connect(mGain);n.start(t);tone(46,t,.1,'triangle',.4,mGain)}
+  else{const n=noise(a,k==='o'?.14:.04,2),f=a.createBiquadFilter(),g=a.createGain();f.type='highpass';f.frequency.value=8000;g.gain.value=k==='o'?.16:.1;n.connect(f).connect(g).connect(mGain);n.start(t)}}
+function startMusic(){if(mTimer||!audio)return;mGain=audio.createGain();mGain.gain.value=musicOn?MV:0;
+  bBus=audio.createBiquadFilter();bBus.type='lowpass';bBus.frequency.value=450;bBus.connect(mGain);
+  sBus=audio.createBiquadFilter();sBus.type='lowpass';sBus.frequency.value=2400;sBus.connect(mGain);
+  const dl=audio.createDelay(),fb=audio.createGain(),wet=audio.createGain();dl.delayTime.value=ST*2;fb.gain.value=.25;wet.gain.value=.16;
+  mGain.connect(audio.destination);mGain.connect(dl);dl.connect(fb).connect(dl);dl.connect(wet).connect(audio.destination);
+  mNext=audio.currentTime+.15;mTimer=setInterval(musicTick,90)}
+function musicTick(){if(!audio||audio.state!=='running')return;
+  while(mNext<audio.currentTime+.35){const q=mStep%32,bar=q>>3,k=q&7,b=BR[bar],t=mNext;
+    tone(b+(k&1?12:0),t,.17,'sawtooth',.55,bBus);
+    if(k===0||k===3||k===4)for(const n of[b+24,b+31,b+36])tone(n,t,.26,'sawtooth',.13,sBus);
+    const me=MEL[bar][k];if(me)tone(me,t,.28,'square',.13,mGain);
+    if(k===0||k===3||k===4)drum('k',t);
+    if(k===2||k===6)drum('s',t);
+    drum(k===7?'o':'h',t);
+    mStep++;mNext+=ST}}
+// 作战音效：太鼓 + 铜管强拍 + 镲，连击越高音越高；同时把 BGM 瞬间压低再恢复
+function battle(p,combo){try{const a=AC(),t=a.currentTime,m=a.destination,r=50+Math.min(combo,7);
+  const d=a.createOscillator(),dg=a.createGain();d.type='sine';d.frequency.setValueAtTime(130,t);d.frequency.exponentialRampToValueAtTime(48,t+.25);dg.gain.setValueAtTime(.6,t);dg.gain.exponentialRampToValueAtTime(.001,t+.35);d.connect(dg).connect(m);d.start(t);d.stop(t+.4);
+  const lp=a.createBiquadFilter(),bg=a.createGain();lp.type='lowpass';lp.frequency.setValueAtTime(700,t);lp.frequency.exponentialRampToValueAtTime(2600,t+.08);lp.frequency.exponentialRampToValueAtTime(900,t+.45);bg.gain.setValueAtTime(.0001,t);bg.gain.exponentialRampToValueAtTime(.26,t+.015);bg.gain.exponentialRampToValueAtTime(.0001,t+.5);lp.connect(bg).connect(m);
+  for(const n of[r,r+7,r+12]){const o=a.createOscillator();o.type='sawtooth';o.frequency.value=mf(n);o.detune.value=(Math.random()-.5)*14;o.connect(lp);o.start(t);o.stop(t+.55)}
+  const c=noise(a,.5,2.2),hp=a.createBiquadFilter(),cg=a.createGain();hp.type='highpass';hp.frequency.value=5500;cg.gain.value=.1+.08*Math.min(p,1.5);c.connect(hp).connect(cg).connect(m);c.start(t+.01);
+  if(mGain&&musicOn){mGain.gain.cancelScheduledValues(t);mGain.gain.setValueAtTime(MV*.35,t);mGain.gain.linearRampToValueAtTime(MV,t+.9)}}catch(e){}}
+$('mus').onclick=e=>{e.stopPropagation();musicOn=!musicOn;$('mus').textContent=musicOn?'🎵':'🔇';if(mGain)mGain.gain.value=musicOn?MV:0};
+document.addEventListener('visibilitychange',()=>{if(!audio)return;document.hidden?audio.suspend():audio.resume()});
+// geometry (world units, origin = canvas center)
+const cx=()=>W/2, hy=()=>H*.36;
+function head(){return{x:cx()+st.tilt*30*S,y:hy(),r:62*S}}
+function tip(){const h=head();return{x:h.x+h.r*.95,y:h.y+h.r*.38}}
+function say(t,d){st.say={txt:t,t:d||1.8}}
+function pop(txt,x,y,size,col){st.pop.push({txt,x,y,size,col,t:0,rot:(Math.random()-.5)*.5})}
+function slap(dir,v,pt){
+  const p=Math.min(v/1600,2);st.hits++;st.combo++;say(['哎你干嘛！','你谁啊你！','公共场所你打人？','疼疼疼，我就一根……','好，好，我少抽！','我掐，我真掐！'][Math.min(st.hits-1,5)]);st.cool=.22;
+  st.addict=Math.max(0,st.addict-(5+6*p)-Math.min(st.combo,8));
+  st.tiltV+=dir*(6+8*p);st.face=.6;st.shake=.12+.12*p;st.lines=.16;st.lit=false;st.relight=1.4;
+  const h=head();
+  pop(p>1.3?'啪！！！！':p>.8?'啪！！':'啪！',h.x+dir*40*S,h.y-h.r*1.1,(44+p*34)*S,RED);
+  if(st.combo>=3)pop(st.combo+' 连击',cx(),H*.12+60,26*S,INK);
+  if(p>1.3)pop('整个人被扇歪',h.x,h.y+h.r*1.5,18*S,INK);
+  beep(p);battle(p,st.combo)}
+function sweep(x,y,vx,vy){
+  for(const s of st.smoke){const dx=s.x-x,dy=s.y-y;if(dx*dx+dy*dy<(80*S)**2){s.vx+=vx*.5;s.vy+=vy*.5;s.fade=1}}}
+function pos(e){const r=cv.getBoundingClientRect();return{x:e.clientX-r.left,y:e.clientY-r.top}}
+cv.addEventListener('pointerdown',e=>{down=true;try{AC()}catch(e){}trail=[];const p=pos(e);ptr=p;trail.push({...p,t:performance.now()});cv.setPointerCapture(e.pointerId)});
+cv.addEventListener('pointerup',()=>{down=false;trail=[]});
+cv.addEventListener('pointercancel',()=>{down=false;trail=[]});
+cv.addEventListener('pointermove',e=>{
+  const p=pos(e);ptr=p;if(!down||!st.run||st.talk)return;
+  const now=performance.now();trail.push({...p,t:now});
+  while(trail.length>2&&now-trail[0].t>130)trail.shift();
+  const a=trail[0],b=trail[trail.length-1],dt=(b.t-a.t)/1000;if(dt<.016)return;
+  const vx=(b.x-a.x)/dt,vy=(b.y-a.y)/dt,v=Math.hypot(vx,vy);
+  if(v>500)sweep(p.x,p.y,vx*.012,vy*.012);
+  if(v>900&&Math.abs(vx)>Math.abs(vy)*1.2&&st.cool<=0){
+    const h=head();let hit=false;
+    for(const q of trail){if(Math.hypot(q.x-h.x,q.y-h.y)<h.r*1.25){hit=true;break}}
+    if(hit){slap(Math.sign(vx),v,p);trail=[{...p,t:now}]}
+    else if(!st.whiff||now-st.whiff>400){st.whiff=now;pop('呼',p.x,p.y,24*S,INK);whoosh(v)}}
+});
+function showIntro(){const L=LV[lvl],pn=$('panel');mode='intro';pn.style.display='flex';pn.querySelector('h1').innerHTML=L.title;$('msg').innerHTML='<b>'+L.name+'</b><br>'+L.intro+'<br><span class="sub">'+HINT+'</span>';$('go').textContent=L.btn}
+function renderDlg(){const t=LV[lvl].talk[di],b=$('dwho');b.textContent=t[0];b.className=t[0]==='我'?'me':'';$('dtxt').textContent=t[1];const d=$('dlg');d.style.top=Math.max(H*.3,Math.min(H*.67,innerHeight-d.offsetHeight-10))+'px'}
+function fight(){pop(LV[lvl].fin,cx(),hy()-110*S,42*S,RED);beep(.8);battle(1,0)}
+function startTalk(){st.talk=true;di=0;$('dlg').style.display='block';renderDlg()}
+$('dlg').onclick=()=>{di++;if(di>=LV[lvl].talk.length){$('dlg').style.display='none';st.talk=false;fight()}else renderDlg()};
+function end(win){st.run=false;st.over=true;const L=LV[lvl],pn=$('panel'),last=lvl>=LV.length-1;pn.style.display='flex';
+  pn.querySelector('h1').innerHTML=win?'他把烟<br>掐了':'你被熏<br>跑了';
+  const cap=win?L.win:L.lose;
+  const tail=win?(st.hits<=6?`你只扇了 ${st.hits} 下，他就懂了。`:`你扇了 ${st.hits} 下。他懂了，你也有点上头。`):(st.air>=100?'二手烟浓度到顶了。':'时间到，他还在抽。');
+  $('msg').innerHTML=`<span id="strip">${cap.map(c=>'<div>'+c+'</div>').join('')}</span><br><span class="sub">${tail}</span>`;
+  if(win){mode=last?'again':'next';$('go').textContent=last?'从头再玩':'下一关'}else{mode='retry';$('go').textContent='再来一次'}}
+$('go').onclick=()=>{try{AC();startMusic()}catch(e){}beep(.4);
+  if(mode==='next'||mode==='again'){lvl=mode==='next'?lvl+1:0;showIntro();return}
+  $('panel').style.display='none';reset();if(mode==='intro')startTalk();else fight()};
+function update(dt){
+  if(!st.run)return;
+  if(!st.talk)st.t-=dt;st.cool-=dt;if(st.say){st.say.t-=dt;if(st.say.t<=0)st.say=null}st.shake=Math.max(0,st.shake-dt);st.lines=Math.max(0,st.lines-dt);st.face=Math.max(0,st.face-dt);
+  st.tiltV+=(-st.tilt*60-st.tiltV*7)*dt;st.tilt+=st.tiltV*dt;
+  if(!st.lit){st.relight-=dt;if(st.relight<=0){st.lit=true;st.combo=0;say(['再来一根。','就这一根，真的。','我这是在思考人生。'][st.hits%3])}}
+  if(st.lit){st.puff-=dt;if(st.puff<=0){st.puff=.1;const t=tip();st.smoke.push({x:t.x,y:t.y,vx:(Math.random()-.3)*20,vy:20+Math.random()*20,r:(10+Math.random()*8)*S,fade:0,a:.55})}}
+  for(let i=st.smoke.length-1;i>=0;i--){const s=st.smoke[i];s.x+=s.vx*dt;s.y+=s.vy*dt*S*1.2;s.vx*=.985;s.r+=dt*14*S;s.vy+=(s.vy<60?30*dt:0);
+    if(s.fade)s.a-=dt*.5;
+    if(s.y>H*.9){if(!st.talk)st.air=Math.min(100,st.air+1.6);st.smoke.splice(i,1)}
+    else if(s.x<-60||s.x>W+60||s.a<=0)st.smoke.splice(i,1)}
+  st.air=Math.max(0,st.air-dt*1.5);
+  for(let i=st.pop.length-1;i>=0;i--){st.pop[i].t+=dt;if(st.pop[i].t>.8)st.pop.splice(i,1)}
+  if(!st.talk){if(st.addict<=0)end(true);else if(st.air>=100||st.t<=0)end(false)}}
+function drawFace(h){
+  ctx.strokeStyle=INK;ctx.fillStyle=INK;ctx.lineWidth=4*S;ctx.lineCap='round';
+  // 鼻子（大蒜鼻）、法令纹
+  ctx.save();ctx.fillStyle='#e0a98a';ctx.beginPath();ctx.ellipse(0,h.r*.14,h.r*.13,h.r*.16,0,0,7);ctx.fill();ctx.stroke();ctx.restore();
+  ctx.lineWidth=2*S;for(const sx of[-1,1]){ctx.beginPath();ctx.moveTo(sx*h.r*.22,h.r*.22);ctx.quadraticCurveTo(sx*h.r*.42,h.r*.4,sx*h.r*.34,h.r*.62);ctx.stroke()}ctx.lineWidth=4*S;
+  if(st.face>0){ // 被扇：ﾟДﾟ
+    for(const sx of[-1,1]){ctx.beginPath();ctx.arc(sx*h.r*.36,-h.r*.15,h.r*.14,0,7);ctx.stroke();ctx.beginPath();ctx.arc(sx*h.r*.36,-h.r*.15,h.r*.04,0,7);ctx.fill();ctx.lineWidth=4.5*S;ctx.beginPath();ctx.moveTo(sx*h.r*.62,-h.r*.42);ctx.lineTo(sx*h.r*.18,-h.r*.34);ctx.stroke();ctx.lineWidth=4*S}
+    ctx.beginPath();ctx.ellipse(0,h.r*.5,h.r*.2,h.r*.2,0,0,7);ctx.stroke();
+    ctx.fillStyle=RED;ctx.globalAlpha=.55;ctx.beginPath();ctx.ellipse(Math.sign(st.tiltV||1)*-h.r*.55,h.r*.15,h.r*.3,h.r*.22,0,0,7);ctx.fill();ctx.globalAlpha=1;
+  }else{
+    for(const sx of[-1,1]){ // 浓眉、耷拉的眼皮、眼袋
+      ctx.lineWidth=5.5*S;ctx.beginPath();ctx.moveTo(sx*h.r*.58,-h.r*.34);ctx.lineTo(sx*h.r*.18,-h.r*.26);ctx.stroke();ctx.lineWidth=4*S;
+      ctx.beginPath();ctx.moveTo(sx*h.r*.52,-h.r*.12);ctx.lineTo(sx*h.r*.2,-h.r*.12);ctx.stroke();
+      ctx.beginPath();ctx.arc(sx*h.r*.36,-h.r*.05,h.r*.045,0,7);ctx.fill();
+      ctx.lineWidth=2*S;ctx.beginPath();ctx.arc(sx*h.r*.36,h.r*.0,h.r*.17,.25,2.9);ctx.stroke();ctx.lineWidth=4*S}
+    // 八字胡 + 叼烟的嘴
+    ctx.beginPath();ctx.moveTo(-h.r*.34,h.r*.4);ctx.quadraticCurveTo(-h.r*.12,h.r*.28,0,h.r*.34);ctx.quadraticCurveTo(h.r*.12,h.r*.28,h.r*.3,h.r*.38);ctx.lineTo(h.r*.18,h.r*.42);ctx.quadraticCurveTo(0,h.r*.38,-h.r*.2,h.r*.45);ctx.closePath();ctx.fill();
+    ctx.lineWidth=3*S;ctx.beginPath();ctx.moveTo(-h.r*.18,h.r*.52);ctx.lineTo(h.r*.12,h.r*.45);ctx.stroke()}}
+function draw(){
+  ctx.save();ctx.clearRect(0,0,W,H);ctx.fillStyle=PAPER;ctx.fillRect(0,0,W,H);
+  // 半调点背景
+  ctx.fillStyle='rgba(26,22,20,.07)';for(let y=0;y<H;y+=16)for(let x=(y/16%2)*8;x<W;x+=16){ctx.beginPath();ctx.arc(x,y,1.6,0,7);ctx.fill()}
+  ctx.fillStyle=INK;ctx.fillRect(0,H*.64,W,3);for(let i=0;i<(lvl?0:20);i++){const bx=(Math.sin(i*12.9)*.5+.5)*W,by=H*.66+(i%4)*14*S,a=Math.sin(i*7.1);ctx.save();ctx.translate(bx,by);ctx.rotate(a);ctx.fillStyle='#fff';ctx.strokeStyle=INK;ctx.lineWidth=1.5;ctx.fillRect(-7*S,-2*S,14*S,4*S);ctx.strokeRect(-7*S,-2*S,14*S,4*S);ctx.restore()}
+  if(st.shake>0)ctx.translate((Math.random()-.5)*14*st.shake*10,(Math.random()-.5)*14*st.shake*10);
+  if(st.lines>0){ctx.strokeStyle=INK;ctx.lineWidth=2;const h=head();for(let i=0;i<46;i++){const a=i/46*6.283,r1=h.r*(1.5+Math.random()*.4),r2=Math.max(W,H);ctx.globalAlpha=.55;ctx.beginPath();ctx.moveTo(h.x+Math.cos(a)*r1,h.y+Math.sin(a)*r1);ctx.lineTo(h.x+Math.cos(a)*r2,h.y+Math.sin(a)*r2);ctx.stroke()}ctx.globalAlpha=1}
+  const h=head();
+  // 身体：皱巴巴的灰夹克、啤酒肚、歪领带
+  ctx.fillStyle=LV[lvl].jk;ctx.strokeStyle=INK;ctx.lineWidth=5*S;
+  ctx.beginPath();ctx.moveTo(cx()-125*S,H*.62);ctx.quadraticCurveTo(cx()-118*S,hy()+h.r*1.1,cx()-34*S,hy()+h.r*1.02);ctx.lineTo(cx()+34*S,hy()+h.r*1.02);ctx.quadraticCurveTo(cx()+118*S,hy()+h.r*1.1,cx()+125*S,H*.62);ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.moveTo(cx()-34*S,hy()+h.r*1.02);ctx.lineTo(cx()+34*S,hy()+h.r*1.02);ctx.lineTo(cx()+6*S,hy()+h.r*1.75);ctx.lineTo(cx()-6*S,hy()+h.r*1.75);ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.fillStyle='#6b5b3e';ctx.beginPath();ctx.moveTo(cx()-7*S,hy()+h.r*1.05);ctx.lineTo(cx()+9*S,hy()+h.r*1.05);ctx.lineTo(cx()+16*S,hy()+h.r*2.0);ctx.lineTo(cx()+3*S,hy()+h.r*2.25);ctx.lineTo(cx()-9*S,hy()+h.r*1.95);ctx.closePath();ctx.fill();ctx.stroke();
+  ctx.fillStyle='#fff';ctx.beginPath();ctx.ellipse(cx(),H*.575,92*S,34*S,0,0,Math.PI);ctx.fill();ctx.stroke();
+  ctx.fillStyle=INK;ctx.beginPath();ctx.arc(cx(),H*.575,3.5*S,0,7);ctx.fill();
+  // 头
+  ctx.save();ctx.translate(h.x,h.y);ctx.rotate(st.tilt*.35);
+  const sk='#ecc49c';ctx.fillStyle=sk;
+  for(const sx of[-1,1]){ctx.beginPath();ctx.arc(sx*h.r*1.02,h.r*.08,h.r*.15,0,7);ctx.fill();ctx.stroke()}
+  ctx.beginPath();ctx.ellipse(0,h.r*.03,h.r*1.04,h.r*1.02,0,0,7);ctx.fill();ctx.stroke();
+  ctx.fillStyle=INK;for(const sx of[-1,1]){ctx.beginPath();ctx.ellipse(sx*h.r*.9,-h.r*.22,h.r*.15,h.r*.3,sx*-.35,0,7);ctx.fill()}
+  ctx.lineWidth=2.5*S;for(let k=0;k<3;k++){ctx.beginPath();ctx.moveTo(-h.r*.78,-h.r*(.42+k*.02));ctx.quadraticCurveTo(0,-h.r*(1.0-k*.04),h.r*.7,-h.r*(.5+k*.03));ctx.stroke()}
+  ctx.strokeStyle='rgba(255,255,255,.7)';ctx.lineWidth=3*S;ctx.beginPath();ctx.arc(-h.r*.15,-h.r*.7,h.r*.22,3.6,4.6);ctx.stroke();ctx.strokeStyle=INK;
+  ctx.lineWidth=1.8*S;for(let k=0;k<2;k++){ctx.beginPath();ctx.moveTo(-h.r*.4,-h.r*(.5-k*.1)+h.r*.02);ctx.quadraticCurveTo(0,-h.r*(.58-k*.1),h.r*.4,-h.r*(.5-k*.1)+h.r*.02);ctx.stroke()}
+  ctx.fillStyle='rgba(26,22,20,.45)';for(let k=0;k<26;k++){const a=.25+k/26*2.65,rr=h.r*(.82+.1*Math.sin(k*5.3));ctx.fillRect(Math.cos(a)*rr*.95-1,Math.sin(a)*rr+h.r*.05,2,2)}ctx.fillStyle=INK;ctx.lineWidth=5*S;
+  if(st.face>0){ctx.lineWidth=3*S;for(let i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(i*h.r*.3,-h.r*.95);ctx.lineTo(i*h.r*.4+Math.sign(st.tiltV)*14*S,-h.r*1.35);ctx.stroke()}ctx.lineWidth=5*S}
+  drawFace(h);
+  // 烟
+  ctx.restore();
+  if(st.lit){const t=tip();ctx.save();ctx.translate(h.x,h.y);ctx.rotate(st.tilt*.35);ctx.fillStyle='#fff';ctx.lineWidth=3*S;ctx.fillRect(h.r*.1,h.r*.34,h.r*.85,h.r*.12);ctx.strokeRect(h.r*.1,h.r*.34,h.r*.85,h.r*.12);ctx.fillStyle=RED;ctx.fillRect(h.r*.95,h.r*.34,h.r*.09,h.r*.12);ctx.restore()}
+  if(lvl===1){const ty=H*.585;ctx.fillStyle='#b5683c';ctx.strokeStyle=INK;ctx.lineWidth=4*S;ctx.fillRect(-10,ty,W+20,H*.07);ctx.strokeRect(-10,ty,W+20,H*.07);ctx.fillStyle='#fff';for(const k of[-.28,0,.28]){ctx.beginPath();ctx.ellipse(cx()+k*W*.9,ty+H*.03,32*S,10*S,0,0,7);ctx.fill();ctx.stroke()}ctx.fillStyle='#8b8b8b';ctx.beginPath();ctx.ellipse(cx()+34*S,ty+H*.02,14*S,5*S,0,0,7);ctx.fill();ctx.stroke()}
+  // 烟雾
+  for(const s of st.smoke){ctx.globalAlpha=Math.max(0,s.a);ctx.fillStyle='#8f897f';ctx.beginPath();ctx.arc(s.x,s.y,s.r,0,7);ctx.fill()}ctx.globalAlpha=1;
+  // 拟声词
+  for(const p of st.pop){const k=p.t/.8,sc=1+(1-Math.min(1,k*5))*.6;ctx.save();ctx.translate(p.x,p.y-k*30);ctx.rotate(p.rot);ctx.scale(sc,sc);ctx.globalAlpha=1-k*k;ctx.font=`900 ${p.size}px "Noto Sans SC",sans-serif`;ctx.textAlign='center';ctx.lineWidth=p.size*.18;ctx.strokeStyle=PAPER;ctx.strokeText(p.txt,0,0);ctx.fillStyle=p.col;ctx.fillText(p.txt,0,0);ctx.restore()}
+  if(st.say){const fs=17*S;ctx.font=`900 ${fs}px "Noto Sans SC",sans-serif`;const tw=ctx.measureText(st.say.txt).width+22*S,bh=fs*2,bx=Math.max(8,Math.min(W-tw-8,h.x-tw*.35)),by=h.y-h.r*1.55-bh;
+    ctx.fillStyle='#fff';ctx.strokeStyle=INK;ctx.lineWidth=3*S;ctx.beginPath();ctx.roundRect(bx,by,tw,bh,10*S);ctx.fill();ctx.stroke();
+    ctx.beginPath();ctx.moveTo(h.x-8*S,by+bh);ctx.lineTo(h.x-2*S,by+bh+16*S);ctx.lineTo(h.x+10*S,by+bh);ctx.fillStyle='#fff';ctx.fill();ctx.stroke();ctx.fillRect(h.x-6*S,by+bh-2,14*S,5);
+    ctx.fillStyle=INK;ctx.textAlign='center';ctx.fillText(st.say.txt,bx+tw/2,by+bh*.66)}
+  // 手
+  if(ptr.x>-50){ctx.save();ctx.translate(ptr.x,ptr.y);const raised=down;ctx.rotate(raised?-.3:0);ctx.fillStyle='#f6d9b8';ctx.strokeStyle=INK;ctx.lineWidth=4*S;
+    ctx.beginPath();ctx.ellipse(0,0,(raised?26:20)*S,(raised?32:24)*S,0,0,7);ctx.fill();ctx.stroke();
+    for(let i=-2;i<=2;i++){ctx.beginPath();ctx.roundRect(i*9*S-4*S,-(raised?52:36)*S,8*S,(raised?24:14)*S,4*S);ctx.fill();ctx.stroke()}ctx.restore()}
+  ctx.restore();
+  $('air').firstElementChild.style.width=st.air+'%';$('addict').firstElementChild.style.width=st.addict+'%';
+  $('time').textContent=st.run?Math.max(0,st.t).toFixed(0):'';$('combo').textContent=st.run&&st.combo>1?st.combo+' 连击':''}
+function loop(n){const dt=Math.min(.05,(n-st.last)/1000);st.last=n;update(dt);draw();requestAnimationFrame(loop)}
+showIntro();requestAnimationFrame(n=>{st.last=n;loop(n)});
+</script></body></html>
